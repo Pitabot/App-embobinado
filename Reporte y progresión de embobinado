@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Taller - Motores</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; padding: 20px; }
+        .card { background: #2d2d2d; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #444; }
+        button { background: #007bff; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; width: 100%; font-size: 16px; margin: 5px 0; }
+        button.stop { background: #dc3545; }
+        select, input { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; background: #333; color: white; border: 1px solid #555; }
+        .chart-container { position: relative; height: 300px; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <h2>🛠️ Registro de Motor</h2>
+    
+    <div class="card">
+        <label>Capacidad del Motor:</label>
+        <select id="hpSelector">
+            <option value="Chico (1-10 HP)">Chico (1-10 HP)</option>
+            <option value="Mediano (15-40 HP)">Mediano (15-40 HP)</option>
+            <option value="Grande (50+ HP)">Grande (50+ HP)</option>
+        </select>
+        
+        <div id="timerDisplay" style="font-size: 24px; text-align: center; margin: 15px 0;">00:00:00</div>
+        
+        <button id="startBtn" onclick="startTimer()">Iniciar Trabajo</button>
+        <button id="stopBtn" class="stop" onclick="stopTimer()" style="display:none;">Terminar y Guardar</button>
+    </div>
+
+    <div class="card">
+        <h3>Productividad de Hoy</h3>
+        <div class="chart-container">
+            <canvas id="myChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let startTime, timerInterval;
+        const ctx = document.getElementById('myChart').getContext('2d');
+        
+        // Gráfica inicial vacía
+        let myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Trabajo Real', 'Espera/Permisos'],
+                datasets: [{
+                    label: 'Horas',
+                    data: [0, 0],
+                    backgroundColor: ['#007bff', '#ffc107']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        function startTimer() {
+            startTime = Date.now();
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'block';
+            timerInterval = setInterval(updateDisplay, 1000);
+        }
+
+        function updateDisplay() {
+            let diff = Date.now() - startTime;
+            let h = Math.floor(diff / 3600000);
+            let m = Math.floor((diff % 3600000) / 60000);
+            let s = Math.floor((diff % 60000) / 1000);
+            document.getElementById('timerDisplay').innerText = 
+                `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            let durationHours = (Date.now() - startTime) / 3600000;
+            
+            // Simulación: Actualiza la gráfica con el tiempo real
+            myChart.data.datasets[0].data[0] += durationHours;
+            myChart.update();
+            
+            alert("Trabajo guardado con éxito.");
+            resetUI();
+        }
+
+        function resetUI() {
+            document.getElementById('startBtn').style.display = 'block';
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('timerDisplay').innerText = "00:00:00";
+        }
+    </script>
+</body>
+</html>
