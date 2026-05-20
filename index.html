@@ -129,6 +129,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+/* Diagram */
+.dtool{background:var(--panel2);border:1px solid var(--border2);border-radius:5px;color:var(--text);cursor:pointer;width:30px;height:30px;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s;}
+.dtool:hover{border-color:var(--accent);color:var(--accent);}
+.dtool.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.dsize{background:var(--panel2);border:1px solid var(--border2);border-radius:5px;color:var(--text);cursor:pointer;font-size:11px;line-height:1;transition:all .15s;}
+.dsize:hover,.dsize.active{border-color:var(--accent);color:var(--accent);}
+.dcolor{width:24px;height:24px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:transform .1s;flex-shrink:0;}
+.dcolor:hover{transform:scale(1.2);}
+.dcolor.active{border-color:#fff;transform:scale(1.15);}
 </style>
 </head>
 <body>
@@ -186,6 +196,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
   <button class="tab" onclick="goTab('tiempo')">⏱ TIEMPO</button>
   <button class="tab" onclick="goTab('mensajes')">💬 MENSAJES</button>
   <button class="tab" onclick="goTab('fotos')">📷 FOTOS</button>
+  <button class="tab" onclick="goTab('diagrama')">✏️ DIAGRAMA</button>
 </div>
 
 <div id="content">
@@ -268,7 +279,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
   </div>
   <div id="ses-empty" style="font-family:var(--mono);color:var(--muted);font-size:12px;padding:16px 0;">Aún no hay jornadas. Usa ▶ INICIAR para comenzar.</div>
   <table class="dtbl" id="ses-tbl" style="display:none">
-    <thead><tr><th>#</th><th>INICIO</th><th>FIN</th><th>DURACIÓN</th><th>ESTADO</th><th>✏️</th></tr></thead>
+    <thead><tr><th>#</th><th>FECHA</th><th>INICIO</th><th>FIN</th><th>DURACIÓN</th><th>ESTADO</th><th>✏️</th></tr></thead>
     <tbody id="ses-body"></tbody>
   </table>
 </div>
@@ -283,9 +294,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
   </div>
   <div class="st">MENSAJES PREDETERMINADOS</div>
   <div class="chips" id="pchips" style="margin-bottom:18px;"></div>
-  <div class="st">NOTA LIBRE</div>
+  <div class="st">NOTA + FOTO DE AVANCE</div>
   <textarea id="fnote" placeholder="Observaciones técnicas, anomalías, mediciones..."></textarea>
-  <div style="margin-top:8px;"><button class="btn ba bs" onclick="addFree()">+ AGREGAR NOTA</button></div>
+  <!-- Photo preview for pending attachment -->
+  <div id="note-photos-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>
+  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <button class="btn ba bs" onclick="addFree()">+ AGREGAR NOTA</button>
+    <button class="btn bd bs" onclick="document.getElementById('note-photo-input').click()">📷 ADJUNTAR FOTO</button>
+    <input type="file" id="note-photo-input" accept="image/*" multiple style="display:none" onchange="attachNotePhotos(this)"/>
+    <span id="note-photo-count" style="font-family:var(--mono);font-size:11px;color:var(--muted);display:none;"></span>
+  </div>
   <div class="st" style="margin-top:20px;">HISTORIAL (<span id="mcnt">0</span>)</div>
   <div id="mempty" style="font-family:var(--mono);color:var(--muted);font-size:12px;padding:14px 0;">Sin mensajes.</div>
   <div id="mlist"></div>
@@ -294,11 +312,72 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 <!-- FOTOS -->
 <div class="pane" id="pane-fotos">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
-    <div class="st" style="margin:0;">EVIDENCIA FOTOGRÁFICA (<span id="pcnt">0</span>)</div>
-    <button class="btn ba bs" onclick="document.getElementById('finput').click()">+ AGREGAR</button>
+    <div class="st" style="margin:0;">GALERÍA COMPLETA (<span id="pcnt">0</span> FOTOS)</div>
   </div>
-  <input type="file" id="finput" accept="image/*" multiple style="display:none" onchange="addPhotos(this)"/>
-  <div id="pgrid"><button class="padd" onclick="document.getElementById('finput').click()">+</button></div>
+  <div id="pgrid" style="display:flex;flex-wrap:wrap;gap:10px;">
+    <div style="font-family:var(--mono);color:var(--muted);font-size:12px;padding:16px 0;" id="pgrid-empty">Las fotos adjuntadas en mensajes aparecen aquí.</div>
+  </div>
+</div>
+
+<!-- DIAGRAMA -->
+<div class="pane" id="pane-diagrama">
+  <div class="st">DIAGRAMA DE CONEXIONES</div>
+
+  <!-- Toolbar -->
+  <div id="dtoolbar" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+
+    <!-- Tool selector -->
+    <div style="display:flex;gap:4px;margin-right:4px;">
+      <button class="dtool active" id="dtool-pen"    onclick="setTool('pen')"    title="Lápiz libre">✏️</button>
+      <button class="dtool"        id="dtool-line"   onclick="setTool('line')"   title="Línea recta">╱</button>
+      <button class="dtool"        id="dtool-rect"   onclick="setTool('rect')"   title="Rectángulo">▭</button>
+      <button class="dtool"        id="dtool-circle" onclick="setTool('circle')" title="Círculo">○</button>
+      <button class="dtool"        id="dtool-text"   onclick="setTool('text')"   title="Texto">T</button>
+      <button class="dtool"        id="dtool-eraser" onclick="setTool('eraser')" title="Borrador">⌫</button>
+    </div>
+
+    <div style="width:1px;height:28px;background:var(--border);margin:0 4px;"></div>
+
+    <!-- Color palette -->
+    <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;">
+      <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">COLOR</span>
+      <div id="dpalette" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+      <input type="color" id="dpicker" value="#f0a500" style="width:28px;height:28px;border:none;background:transparent;cursor:pointer;padding:0;" title="Color personalizado"/>
+    </div>
+
+    <div style="width:1px;height:28px;background:var(--border);margin:0 4px;"></div>
+
+    <!-- Stroke width -->
+    <div style="display:flex;gap:4px;align-items:center;">
+      <span style="font-family:var(--mono);font-size:9px;color:var(--muted);">GROSOR</span>
+      <button class="dsize active" id="dsz-1" onclick="setSize(2)"  style="width:22px;height:22px;">─</button>
+      <button class="dsize"        id="dsz-2" onclick="setSize(4)"  style="width:22px;height:22px;font-size:16px;">─</button>
+      <button class="dsize"        id="dsz-3" onclick="setSize(7)"  style="width:22px;height:22px;font-size:22px;">─</button>
+    </div>
+
+    <div style="width:1px;height:28px;background:var(--border);margin:0 4px;"></div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:4px;">
+      <button class="btn bd bs" onclick="dUndo()"      title="Deshacer">↩ Deshacer</button>
+      <button class="btn bd bs" onclick="dClear()"     title="Limpiar todo" style="color:var(--red);">🗑 Limpiar</button>
+      <button class="btn ba bs" onclick="dSaveImg()"   title="Guardar imagen">💾 Guardar</button>
+      <button class="btn bb bs" onclick="dAddToMsg()"  title="Agregar al historial de mensajes">📋 Enviar a mensajes</button>
+    </div>
+  </div>
+
+  <!-- Label input (for text tool) -->
+  <div id="dtext-row" style="display:none;margin-bottom:8px;display:none;">
+    <input id="dtext-input" placeholder="Escribe el texto y haz clic en el diagrama..." style="width:100%;"/>
+  </div>
+
+  <!-- Canvas -->
+  <div style="position:relative;border:1px solid var(--border);border-radius:6px;overflow:hidden;touch-action:none;background:#0d1520;">
+    <canvas id="dcanvas" style="display:block;width:100%;touch-action:none;cursor:crosshair;"></canvas>
+  </div>
+  <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:6px;">
+    Toca y arrastra para dibujar · Usa los colores para marcar fases (R/S/T) o tierra
+  </div>
 </div>
 
 </div><!-- /content -->
@@ -323,13 +402,15 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
 <!-- EDIT SESSION MODAL -->
 <div class="mbg" id="medit">
   <div class="modal">
-    <div class="mtitle" style="color:var(--accent);">✏️ EDITAR TIEMPOS</div>
-    <p style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px;">Ajusta si olvidaste presionar el botón a tiempo.</p>
+    <div class="mtitle" style="color:var(--accent);">✏️ EDITAR JORNADA</div>
+    <p style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px;">Ajusta fecha y hora si olvidaste presionar el botón a tiempo.</p>
     <input type="hidden" id="eidx"/>
-    <div class="g2" style="margin-bottom:14px;">
+    <div class="fld" style="margin-bottom:10px;"><label>FECHA DE INICIO</label><input type="date" id="edate-start"/></div>
+    <div class="g2" style="margin-bottom:10px;">
       <div class="fld"><label>HORA INICIO</label><input type="time" id="estart"/></div>
       <div class="fld"><label>HORA FIN</label><input type="time" id="eend"/></div>
     </div>
+    <div class="fld" style="margin-bottom:14px;"><label>FECHA DE FIN (si es diferente al inicio)</label><input type="date" id="edate-end"/></div>
     <div style="display:flex;gap:8px;">
       <button class="btn ba" style="flex:1" onclick="saveEdit()">GUARDAR</button>
       <button class="btn bd" style="flex:1" onclick="closeM('medit')">CANCELAR</button>
@@ -342,6 +423,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;heigh
   <div class="modal">
     <div class="mtitle" style="color:var(--blue);">+ JORNADA MANUAL</div>
     <p style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:14px;">Registra trabajo sin haber usado el botón.</p>
+    <div class="fld" style="margin-bottom:10px;"><label>FECHA</label><input type="date" id="mdate"/></div>
     <div class="g2" style="margin-bottom:10px;">
       <div class="fld"><label>HORA INICIO</label><input type="time" id="mstart"/></div>
       <div class="fld"><label>HORA FIN</label><input type="time" id="mend"/></div>
@@ -394,9 +476,10 @@ function toast(msg,col='#22c55e'){const e=document.getElementById('toast');e.tex
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
 function goTab(id){
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['motor','devanado','tiempo','mensajes','fotos'][i]===id));
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['motor','devanado','tiempo','mensajes','fotos','diagrama'][i]===id));
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('pane-'+id).classList.add('active');
+  if(id==='diagrama') initCanvas();
 }
 
 // ── Estimated ─────────────────────────────────────────────────────────────
@@ -418,6 +501,14 @@ function setProgress(v){
 
 // ── Stats ─────────────────────────────────────────────────────────────────
 function totalWorked(){return sessions.reduce((a,s)=>a+Math.max(0,(s.end||(s===active?Date.now():s.start))-s.start),0);}
+
+// Returns chart Day-0 timestamp: motor start date if set, else earliest session
+function getChartStart(){
+  const md=gv('m-date');
+  if(md){const d=new Date(md+'T00:00:00');return d.getTime();}
+  if(sessions.length)return sessions[0].start;
+  return null;
+}
 function updStats(){
   document.getElementById('swrk').textContent=fms(totalWorked());
   document.getElementById('sstp').textContent=fms(stoppedMs);
@@ -433,6 +524,7 @@ function recordPt(pct,stopped){
 }
 
 function drawChart(){
+  chartStart=getChartStart(); // always re-derive so changing m-date updates chart
   const canvas=document.getElementById('main-chart');
   if(!canvas)return;
   const dpr=window.devicePixelRatio||1;
@@ -580,8 +672,8 @@ window.addEventListener('resize',drawChart);
 function startWork(){
   if(active){toast('Ya hay una jornada activa','#f0a500');return;}
   const s={start:Date.now(),end:null,stopped:false,stopReason:null,stopNote:''};
-  if(!chartStart)chartStart=s.start;
-  active=s; sessions.push(s);
+  sessions.push(s); active=s;
+  chartStart=getChartStart(); // uses m-date if filled, else now
   document.getElementById('bstart').style.display='none';
   document.getElementById('bstop').style.display='inline-block';
   document.getElementById('bend').style.display='inline-block';
@@ -623,41 +715,69 @@ function confirmStop(){
     :reason==='Falta de material'
     ?`⚠️ TRABAJO DETENIDO — Falta de material. Solicitud enviada a almacén.${note?' Nota: '+note:''}`
     :`⚠️ TRABAJO DETENIDO — ${reason}.${note?' Nota: '+note:''}`;
-  pushMsg(base,`Detención: ${reason}`,true);
+  pushMsg(base,`Detención: ${reason}`,true,[]);
   recordPt(progress,true);
   closeM('mstop'); document.getElementById('snote').value='';
   renderSes(); updStats(); toast(`🔴 Detenido — ${reason}`,'#ef4444');
 }
 
 // ── Edit session ──────────────────────────────────────────────────────────
+function tsToDate(ts){ // returns "YYYY-MM-DD"
+  if(!ts)return'';
+  const d=new Date(ts);
+  return`${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+}
+function buildTs(dateStr,timeStr,fallback){
+  if(!timeStr)return fallback||Date.now();
+  const base=dateStr?new Date(dateStr+'T00:00:00'):new Date(fallback||Date.now());
+  const [h,m]=timeStr.split(':').map(Number);
+  base.setHours(h,m,0,0);
+  return base.getTime();
+}
 function openEdit(i){
+  const s=sessions[i];
   document.getElementById('eidx').value=i;
-  document.getElementById('estart').value=t2i(sessions[i].start);
-  document.getElementById('eend').value=t2i(sessions[i].end);
+  document.getElementById('edate-start').value=tsToDate(s.start);
+  document.getElementById('estart').value=t2i(s.start);
+  document.getElementById('edate-end').value=tsToDate(s.end);
+  document.getElementById('eend').value=t2i(s.end);
   openM('medit');
 }
 function saveEdit(){
-  const i=parseInt(gv('eidx')),s=sessions[i];
-  const ss=gv('estart'),se=gv('eend');
-  if(ss)sessions[i].start=apT(s.start,ss);
-  if(se)sessions[i].end=apT(s.end||Date.now(),se);
+  const i=parseInt(gv('eidx'));
+  const ds=gv('edate-start'),ts=gv('estart');
+  const de=gv('edate-end'),te=gv('eend');
+  if(ts) sessions[i].start=buildTs(ds,ts,sessions[i].start);
+  if(te) sessions[i].end=buildTs(de||ds,te,sessions[i].end||Date.now());
+  // Update chartStart if this is the earliest session
+  chartStart=getChartStart();
   stoppedMs=sessions.filter(x=>x.stopped).reduce((a,x)=>a+Math.max(0,(x.end||0)-x.start),0);
-  closeM('medit'); renderSes(); updStats(); toast('✅ Tiempo actualizado');
+  closeM('medit'); renderSes(); updStats(); toast('✅ Jornada actualizada');
 }
 
 // ── Manual session ────────────────────────────────────────────────────────
-function openManual(){document.getElementById('mstart').value='';document.getElementById('mend').value='';document.getElementById('mstat').value='normal';document.getElementById('msrw').style.display='none';openM('mmanual');}
+function openManual(){
+  // Default date to motor start date or today
+  const motorDate=gv('m-date');
+  const today=new Date().toISOString().split('T')[0];
+  document.getElementById('mdate').value=motorDate||today;
+  document.getElementById('mstart').value='';
+  document.getElementById('mend').value='';
+  document.getElementById('mstat').value='normal';
+  document.getElementById('msrw').style.display='none';
+  openM('mmanual');
+}
 function saveManual(){
-  const ss=gv('mstart'),se=gv('mend');
+  const dateStr=gv('mdate'),ss=gv('mstart'),se=gv('mend');
   if(!ss||!se){toast('Ingresa inicio y fin','#f0a500');return;}
-  const b=new Date();b.setHours(0,0,0,0);
-  const [sh,sm]=ss.split(':').map(Number),[eh,em]=se.split(':').map(Number);
-  const start=b.getTime()+sh*3600000+sm*60000,end=b.getTime()+eh*3600000+em*60000;
-  if(!chartStart)chartStart=start;
+  const start=buildTs(dateStr,ss,Date.now());
+  const end=buildTs(dateStr,se,Date.now());
+  if(end<=start){toast('La hora de fin debe ser mayor al inicio','#f0a500');return;}
   const isSt=gv('mstat')==='stop',rsn=gv('msreason')||'Otro';
   sessions.push({start,end,stopped:isSt,stopReason:isSt?rsn:null,stopNote:''});
   sessions.sort((a,b)=>a.start-b.start);
   if(isSt)stoppedMs+=Math.max(0,end-start);
+  chartStart=getChartStart();
   closeM('mmanual'); renderSes(); updStats(); toast('✅ Jornada manual agregada');
 }
 
@@ -669,10 +789,11 @@ function renderSes(){
   if(!sessions.length){empty.style.display='block';tbl.style.display='none';return;}
   empty.style.display='none'; tbl.style.display='table';
   tbody.innerHTML=sessions.map((s,i)=>{
+    const fecha=new Date(s.start).toLocaleDateString('es-MX',{day:'2-digit',month:'short'});
     const fin=s.end?new Date(s.end).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):`<span class="ok">En curso</span>`;
     const dur=s.end?fms(s.end-s.start):'—';
     const st=s.stopped?`<span class="stop-c">🔴 ${s.stopReason}</span>`:`<span class="ok">✅ Normal</span>`;
-    return`<tr><td>${i+1}</td><td>${new Date(s.start).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</td><td>${fin}</td><td>${dur}</td><td>${st}</td><td><button class="btn bd bs" onclick="openEdit(${i})">✏️</button></td></tr>`;
+    return`<tr><td>${i+1}</td><td style="color:var(--muted)">${fecha}</td><td>${new Date(s.start).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</td><td>${fin}</td><td>${dur}</td><td>${st}</td><td><button class="btn bd bs" onclick="openEdit(${i})">✏️</button></td></tr>`;
   }).join('');
 }
 
@@ -695,13 +816,62 @@ const PRESETS=[
 ];
 document.getElementById('pchips').innerHTML=PRESETS.map((p,i)=>`<button class="chip" onclick="addPreset(${i})">${p.l}</button>`).join('');
 
-function addPreset(i){pushMsg(PRESETS[i].m,PRESETS[i].l,false);toast('💬 Mensaje agregado');}
-function addFree(){const n=gv('fnote').trim();if(!n){toast('Escribe algo primero','#f0a500');return;}pushMsg(n,'Nota libre',false);document.getElementById('fnote').value='';toast('📝 Nota agregada');}
+// Pending photos for the next note
+let pendingPhotos=[];
 
-function pushMsg(text,type,isStop){
-  messages.push({text,type,time:nowS(),isStop});
-  renderMsgs();
+function attachNotePhotos(inp){
+  Array.from(inp.files).forEach(f=>{
+    const r=new FileReader();
+    r.onload=ev=>{
+      pendingPhotos.push({url:ev.target.result,name:f.name,time:nowS()});
+      renderPendingPhotos();
+    };
+    r.readAsDataURL(f);
+  });
+  inp.value='';
 }
+
+function renderPendingPhotos(){
+  const wrap=document.getElementById('note-photos-preview');
+  const cnt=document.getElementById('note-photo-count');
+  if(!pendingPhotos.length){wrap.innerHTML='';cnt.style.display='none';return;}
+  cnt.style.display='inline';
+  cnt.textContent=`${pendingPhotos.length} foto${pendingPhotos.length>1?'s':''} lista${pendingPhotos.length>1?'s':''}`;
+  wrap.innerHTML=pendingPhotos.map((p,i)=>`
+    <div style="position:relative;border:1px solid var(--border);border-radius:5px;overflow:hidden;">
+      <img src="${p.url}" style="width:80px;height:60px;object-fit:cover;display:block;"/>
+      <button onclick="removePending(${i})" style="position:absolute;top:2px;right:2px;background:var(--red);border:none;color:#fff;border-radius:3px;cursor:pointer;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;">×</button>
+    </div>`).join('');
+}
+
+function removePending(i){pendingPhotos.splice(i,1);renderPendingPhotos();}
+
+function addPreset(i){
+  // Presets attach pending photos if any
+  const imgs=[...pendingPhotos];
+  pendingPhotos=[];renderPendingPhotos();
+  pushMsg(PRESETS[i].m,PRESETS[i].l,false,imgs);
+  toast('💬 Mensaje agregado');
+}
+
+function addFree(){
+  const n=gv('fnote').trim();
+  if(!n&&!pendingPhotos.length){toast('Escribe algo o adjunta una foto','#f0a500');return;}
+  const imgs=[...pendingPhotos];
+  pendingPhotos=[];renderPendingPhotos();
+  pushMsg(n||'(sin texto)','Nota libre',false,imgs);
+  document.getElementById('fnote').value='';
+  toast('📝 Nota agregada');
+}
+
+function pushMsg(text,type,isStop,imgs=[]){
+  messages.push({text,type,time:nowS(),isStop,imgs});
+  // Also add to global photos gallery
+  imgs.forEach(p=>photos.push(p));
+  renderMsgs();
+  renderPhotos();
+}
+
 function renderMsgs(){
   const list=document.getElementById('mlist'),empty=document.getElementById('mempty');
   document.getElementById('mcnt').textContent=messages.length;
@@ -709,27 +879,45 @@ function renderMsgs(){
   empty.style.display='none';
   list.innerHTML=messages.map((m,i)=>`
     <div class="msg ${m.isStop?'smsg':''}">
-      <div class="mmeta">${m.time} — ${m.type} <button onclick="delMsg(${i})" style="float:right;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;">✕</button></div>
+      <div class="mmeta">${m.time} — ${m.type}
+        <button onclick="delMsg(${i})" style="float:right;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;">✕</button>
+      </div>
       <div class="mtext">${m.text}</div>
+      ${m.imgs&&m.imgs.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${m.imgs.map(p=>`<img src="${p.url}" style="width:90px;height:68px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;" onclick="openImg('${p.url}')" title="${p.time}"/>`).join('')}</div>`:''}
     </div>`).join('');
 }
-function delMsg(i){messages.splice(i,1);renderMsgs();}
 
-// ── Photos ────────────────────────────────────────────────────────────────
-function addPhotos(inp){
-  Array.from(inp.files).forEach(f=>{
-    const r=new FileReader();
-    r.onload=ev=>{photos.push({url:ev.target.result,name:f.name,time:nowS()});renderPhotos();toast('📷 Foto agregada');};
-    r.readAsDataURL(f);
-  });
-  inp.value='';
+function delMsg(i){
+  // Remove associated photos from global gallery
+  const imgs=messages[i].imgs||[];
+  imgs.forEach(mp=>{const idx=photos.findIndex(p=>p.url===mp.url);if(idx>-1)photos.splice(idx,1);});
+  messages.splice(i,1);
+  renderMsgs(); renderPhotos();
 }
-function delPhoto(i){photos.splice(i,1);renderPhotos();}
+
+// Lightbox
+function openImg(url){
+  const lb=document.createElement('div');
+  lb.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:500;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  lb.innerHTML=`<img src="${url}" style="max-width:95vw;max-height:90vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.8);"/>`;
+  lb.onclick=()=>document.body.removeChild(lb);
+  document.body.appendChild(lb);
+}
+
+// ── Photos gallery (mirrors all photos from messages) ─────────────────────
 function renderPhotos(){
+  const grid=document.getElementById('pgrid');
+  const empty=document.getElementById('pgrid-empty');
   document.getElementById('pcnt').textContent=photos.length;
-  document.getElementById('pgrid').innerHTML=
-    photos.map((p,i)=>`<div class="pthumb"><img src="${p.url}" alt="${p.name}"/><div class="ptime">${p.time}</div><button class="pdel" onclick="delPhoto(${i})">×</button></div>`).join('')
-    +`<button class="padd" onclick="document.getElementById('finput').click()">+</button>`;
+  if(!photos.length){
+    grid.innerHTML='<div id="pgrid-empty" style="font-family:var(--mono);color:var(--muted);font-size:12px;padding:16px 0;">Las fotos adjuntadas en mensajes aparecen aquí.</div>';
+    return;
+  }
+  grid.innerHTML=photos.map((p,i)=>`
+    <div class="pthumb" onclick="openImg('${p.url}')" style="cursor:zoom-in;">
+      <img src="${p.url}" alt="${p.name}"/>
+      <div class="ptime">${p.time}</div>
+    </div>`).join('');
 }
 
 // ── Coil Calculator ───────────────────────────────────────────────────────
@@ -786,19 +974,209 @@ function generatePDF(){
   ${gv('w-notes')?`<h2>Notas Técnicas</h2><p style="font-size:12px;background:#f9f9f9;padding:8px;border-radius:4px;">${gv('w-notes')}</p>`:''}
   <h2>Registro de Jornadas (${sessions.length})</h2>
   ${sessions.length?`<table><thead><tr><th>#</th><th>Inicio</th><th>Fin</th><th>Duración</th><th>Estado</th></tr></thead><tbody>${sessions.map((s,i)=>`<tr><td>${i+1}</td><td>${new Date(s.start).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.end?new Date(s.end).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):'En curso'}</td><td>${s.end?fms(s.end-s.start):'—'}</td><td style="color:${s.stopped?'#dc2626':'#16a34a'}">${s.stopped?'Detenido: '+s.stopReason:'✓ Normal'}</td></tr>`).join('')}</tbody></table>`:'<p style="color:#aaa;font-size:12px;">Sin jornadas.</p>'}
-  <h2>Mensajes (${messages.length})</h2>
-  ${messages.map(m=>`<div style="background:#f9f9f9;border-left:3px solid ${m.isStop?'#dc2626':'#f0a500'};padding:8px 12px;margin-bottom:7px;font-size:12px;border-radius:3px;"><strong style="font-size:10px;color:#888;">${m.time} — ${m.type}</strong><br/>${m.text}</div>`).join('')||'<p style="color:#aaa;font-size:12px;">Sin mensajes.</p>'}
-  <h2>Fotos (${photos.length})</h2>
-  ${photos.length?`<div class="photos">${photos.slice(0,12).map(p=>`<img src="${p.url}" style="width:130px;height:98px;object-fit:cover;border:1px solid #ddd;border-radius:4px;"/>`).join('')}</div>`:'<p style="color:#aaa;font-size:12px;">Sin fotos.</p>'}
+  <h2>Mensajes y Evidencia (${messages.length})</h2>
+  ${messages.map(m=>`<div style="background:#f9f9f9;border-left:3px solid ${m.isStop?'#dc2626':'#f0a500'};padding:8px 12px;margin-bottom:10px;font-size:12px;border-radius:3px;"><strong style="font-size:10px;color:#888;">${m.time} — ${m.type}</strong><br/><span>${m.text}</span>${m.imgs&&m.imgs.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${m.imgs.map(p=>`<img src="${p.url}" style="width:120px;height:90px;object-fit:cover;border:1px solid #ddd;border-radius:4px;"/>`).join('')}</div>`:''}</div>`).join('')||'<p style="color:#aaa;font-size:12px;">Sin mensajes.</p>'}
+  ${photos.length?`<h2>Galería Completa (${photos.length} fotos)</h2><div class="photos">${photos.map(p=>`<img src="${p.url}" style="width:120px;height:90px;object-fit:cover;border:1px solid #ddd;border-radius:4px;"/>`).join('')}</div>`:''}
   <br/><hr style="border-color:#eee;"/><p style="font-size:10px;color:#bbb;text-align:center;">Motor Wind Tracker v3.0</p>
   </body></html>`;
   const w=window.open('','_blank');
   w.document.write(html); w.document.close(); setTimeout(()=>w.print(),600);
 }
 
+// ── DIAGRAM ───────────────────────────────────────────────────────────────
+const PALETTE=['#ef4444','#f0a500','#22c55e','#38bdf8','#a78bfa','#f472b6','#ffffff','#94a3b8','#000000'];
+const PALETTE_NAMES=['Fase R (rojo)','Fase S (ámbar)','Fase T (verde)','Neutro/tierra (azul)','Control (morado)','Señal (rosa)','Blanco','Gris','Negro'];
+
+let dTool='pen', dColor='#f0a500', dSize=2;
+let dDrawing=false, dStartX=0, dStartY=0;
+let dHistory=[], dSnapshot=null;
+let dCanvasReady=false;
+let dTextMode=false;
+
+function initCanvas(){
+  const cv=document.getElementById('dcanvas');
+  if(!cv)return;
+  const W=cv.parentElement.clientWidth;
+  const H=Math.max(420, window.innerHeight*0.55);
+  if(dCanvasReady&&cv.width===W*2)return; // already sized
+  const dpr=window.devicePixelRatio||1;
+  cv.width=W*dpr; cv.height=H*dpr;
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  const ctx=cv.getContext('2d');
+  ctx.scale(dpr,dpr);
+  // Fill dark background
+  ctx.fillStyle='#0d1520';
+  ctx.fillRect(0,0,W,H);
+  // Light grid
+  ctx.strokeStyle='#1a2535'; ctx.lineWidth=0.5;
+  for(let x=0;x<W;x+=20){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=20){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  dHistory=[];
+  dSnapshot=ctx.getImageData(0,0,cv.width,cv.height);
+  dCanvasReady=true;
+  setupCanvasEvents();
+  // Build palette
+  const pal=document.getElementById('dpalette');
+  if(pal&&!pal.children.length){
+    PALETTE.forEach((c,i)=>{
+      const b=document.createElement('button');
+      b.className='dcolor'+(c===dColor?' active':'');
+      b.style.background=c;
+      b.title=PALETTE_NAMES[i];
+      b.onclick=()=>{dColor=c;document.getElementById('dpicker').value=c;document.querySelectorAll('.dcolor').forEach(x=>x.classList.remove('active'));b.classList.add('active');};
+      pal.appendChild(b);
+    });
+    document.getElementById('dpicker').oninput=function(){
+      dColor=this.value;
+      document.querySelectorAll('.dcolor').forEach(x=>x.classList.remove('active'));
+    };
+  }
+}
+
+function setupCanvasEvents(){
+  const cv=document.getElementById('dcanvas');
+  if(cv._eventsSet)return;
+  cv._eventsSet=true;
+  const dpr=window.devicePixelRatio||1;
+
+  function pos(e){
+    const r=cv.getBoundingClientRect();
+    const src=e.touches?e.touches[0]:e;
+    return{x:(src.clientX-r.left),y:(src.clientY-r.top)};
+  }
+
+  function down(e){
+    e.preventDefault();
+    const {x,y}=pos(e);
+    const ctx=cv.getContext('2d');
+    if(dTool==='text'){
+      const label=document.getElementById('dtext-input').value.trim();
+      if(!label){toast('Escribe el texto arriba primero','#f0a500');return;}
+      saveSnapshot();
+      ctx.font=`bold ${dSize*5+10}px 'Share Tech Mono',monospace`;
+      ctx.fillStyle=dColor;
+      ctx.fillText(label,x,y);
+      dHistory.push(cv.getContext('2d').getImageData(0,0,cv.width,cv.height));
+      return;
+    }
+    dDrawing=true; dStartX=x; dStartY=y;
+    saveSnapshot();
+    if(dTool==='pen'||dTool==='eraser'){
+      ctx.beginPath(); ctx.moveTo(x,y);
+    }
+  }
+
+  function move(e){
+    if(!dDrawing)return;
+    e.preventDefault();
+    const {x,y}=pos(e);
+    const ctx=cv.getContext('2d');
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    if(dTool==='pen'){
+      ctx.strokeStyle=dColor; ctx.lineWidth=dSize;
+      ctx.lineTo(x,y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x,y);
+    } else if(dTool==='eraser'){
+      ctx.strokeStyle='#0d1520'; ctx.lineWidth=dSize*5;
+      ctx.lineTo(x,y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x,y);
+    } else {
+      // Preview shape: restore snapshot then draw
+      ctx.putImageData(dSnapshot,0,0);
+      ctx.strokeStyle=dColor; ctx.lineWidth=dSize; ctx.fillStyle='transparent';
+      ctx.beginPath();
+      if(dTool==='line'){
+        ctx.moveTo(dStartX,dStartY); ctx.lineTo(x,y);
+      } else if(dTool==='rect'){
+        ctx.rect(dStartX,dStartY,x-dStartX,y-dStartY);
+      } else if(dTool==='circle'){
+        const rx=Math.abs(x-dStartX)/2, ry=Math.abs(y-dStartY)/2;
+        const cx2=dStartX+(x-dStartX)/2, cy2=dStartY+(y-dStartY)/2;
+        ctx.ellipse(cx2,cy2,rx,ry,0,0,Math.PI*2);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function up(e){
+    if(!dDrawing)return;
+    dDrawing=false;
+    const cv2=document.getElementById('dcanvas');
+    dHistory.push(cv2.getContext('2d').getImageData(0,0,cv2.width,cv2.height));
+    if(dHistory.length>40)dHistory.shift();
+  }
+
+  cv.addEventListener('mousedown',down);
+  cv.addEventListener('mousemove',move);
+  cv.addEventListener('mouseup',up);
+  cv.addEventListener('mouseleave',up);
+  cv.addEventListener('touchstart',down,{passive:false});
+  cv.addEventListener('touchmove',move,{passive:false});
+  cv.addEventListener('touchend',up);
+}
+
+function saveSnapshot(){
+  const cv=document.getElementById('dcanvas');
+  dSnapshot=cv.getContext('2d').getImageData(0,0,cv.width,cv.height);
+}
+
+function setTool(t){
+  dTool=t;
+  document.querySelectorAll('.dtool').forEach(b=>b.classList.remove('active'));
+  document.getElementById('dtool-'+t).classList.add('active');
+  document.getElementById('dtext-row').style.display=t==='text'?'block':'none';
+  document.getElementById('dcanvas').style.cursor=t==='eraser'?'cell':t==='text'?'text':'crosshair';
+}
+
+function setSize(s){
+  dSize=s;
+  document.querySelectorAll('.dsize').forEach(b=>b.classList.remove('active'));
+  const map={2:'dsz-1',4:'dsz-2',7:'dsz-3'};
+  if(map[s])document.getElementById(map[s]).classList.add('active');
+}
+
+function dUndo(){
+  if(!dHistory.length)return;
+  dHistory.pop();
+  const cv=document.getElementById('dcanvas');
+  const ctx=cv.getContext('2d');
+  if(dHistory.length){
+    ctx.putImageData(dHistory[dHistory.length-1],0,0);
+  } else {
+    // Restore blank grid
+    dCanvasReady=false; initCanvas();
+  }
+  toast('↩ Deshecho');
+}
+
+function dClear(){
+  if(!confirm('¿Borrar todo el diagrama?'))return;
+  dCanvasReady=false; dHistory=[];
+  initCanvas();
+  toast('🗑 Diagrama limpiado','#ef4444');
+}
+
+function dSaveImg(){
+  const cv=document.getElementById('dcanvas');
+  const a=document.createElement('a');
+  a.download=`diagrama-${gv('m-tag')||'motor'}-${nowS().replace(':','-')}.png`;
+  a.href=cv.toDataURL('image/png');
+  a.click();
+  toast('💾 Imagen guardada');
+}
+
+function dAddToMsg(){
+  const cv=document.getElementById('dcanvas');
+  const url=cv.toDataURL('image/png');
+  const label=document.getElementById('dtext-input').value.trim()||'Diagrama de conexiones';
+  pushMsg(label,'Diagrama',false,[{url,name:'diagrama.png',time:nowS()}]);
+  toast('📋 Diagrama enviado a mensajes');
+  goTab('mensajes');
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────
 updateEst(); renderMsgs(); renderPhotos(); renderSes();
 setTimeout(drawChart,120);
+// Refresh chart when motor date changes
+document.getElementById('m-date').addEventListener('change',()=>{chartStart=getChartStart();drawChart();});
 </script>
 </body>
 </html>
