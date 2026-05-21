@@ -765,11 +765,28 @@ document.getElementById('pchips').innerHTML=PRESETS.map((p,i)=>
   `<button class="chip" onclick="addPreset(${i})">${p.l}</button>`
 ).join('');
 
+// Compress image to max 800px wide, quality 0.65 — reduces size ~10x
+function compressImg(file, cb){
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=800;
+      let w=img.width, h=img.height;
+      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
+      const cv=document.createElement('canvas');
+      cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      cb({url:cv.toDataURL('image/jpeg',0.65),name:file.name,time:nowS()});
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function attachPhotos(inp){
   Array.from(inp.files).forEach(f=>{
-    const r=new FileReader();
-    r.onload=ev=>{pendingPhotos.push({url:ev.target.result,name:f.name,time:nowS()});renderPending();};
-    r.readAsDataURL(f);
+    compressImg(f, p=>{pendingPhotos.push(p);renderPending();});
   }); inp.value='';
 }
 function renderPending(){
@@ -850,6 +867,23 @@ function delMsg(i){
   renderMsgs(); renderPhotos(); drawChart(); scheduleSave();
 }
 
+function addPhotoToMsg(i){
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*'; inp.multiple=true;
+  inp.onchange=()=>{
+    Array.from(inp.files).forEach(f=>{
+      compressImg(f, p=>{
+        messages[i].imgs=messages[i].imgs||[];
+        messages[i].imgs.push(p);
+        photos.push(p);
+        renderMsgs(); renderPhotos(); scheduleSave();
+        toast('📷 Foto agregada al mensaje');
+      });
+    });
+  };
+  inp.click();
+}
+
 function renderMsgs(){
   const list=document.getElementById('mlist'),empty=document.getElementById('mempty');
   document.getElementById('mcnt').textContent=messages.length;
@@ -864,7 +898,8 @@ function renderMsgs(){
           <span>📅 ${dl} 🕐 ${m.time} — ${m.type} ${pctBadge}</span>
         </div>
         <span style="display:flex;gap:6px;">
-          <button onclick="openEditMsg(${i})" style="background:transparent;border:none;color:var(--accent);cursor:pointer;font-size:13px;" title="Editar fecha, hora, % y texto">✏️</button>
+          <button onclick="addPhotoToMsg(${i})" style="background:transparent;border:none;color:var(--blue);cursor:pointer;font-size:13px;" title="Agregar foto">📷</button>
+          <button onclick="openEditMsg(${i})" style="background:transparent;border:none;color:var(--accent);cursor:pointer;font-size:13px;" title="Editar">✏️</button>
           <button onclick="delMsg(${i})" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:13px;" title="Eliminar">✕</button>
         </span>
       </div>
@@ -1041,14 +1076,23 @@ const SK='mwt_v5';
 const MF=['m-tag','m-model','m-power','m-voltage','m-current','m-rpm','m-type','m-conn','m-date','m-tech','est-h'];
 const WF=['w-groups','w-coils','w-wires','w-turns','w-gauge','w-slots','w-step','w-slotlen','w-crownc','w-crownf','w-dext','w-dint','w-pb','w-pm','w-pt','w-notes','c-sl','c-cc','c-cf','c-mg'];
 
+let _photoWarnShown=false;
 function saveAll(){
   try{
     const fd={};[...MF,...WF].forEach(id=>{const el=document.getElementById(id);if(el)fd[id]=el.value;});
-    localStorage.setItem(SK,JSON.stringify({fd,sessions,stoppedMs,progress,estMs,messages,photos:photos.map(p=>({url:p.url,name:p.name,time:p.time})),savedAt:Date.now()}));
+    // Save photos - already compressed on intake. Limit to 20 photos to stay under 5MB quota.
+    const photoSlice=photos.slice(-20).map(p=>({url:p.url,name:p.name,time:p.time}));
+    localStorage.setItem(SK,JSON.stringify({fd,sessions,stoppedMs,progress,estMs,messages,photos:photoSlice,savedAt:Date.now()}));
+    _photoWarnShown=false; // reset warning after successful save
   }catch(e){
     try{
       const fd={};[...MF,...WF].forEach(id=>{const el=document.getElementById(id);if(el)fd[id]=el.value;});
+      // Try without photos
       localStorage.setItem(SK,JSON.stringify({fd,sessions,stoppedMs,progress,estMs,messages:messages.map(m=>({...m,imgs:[]})),photos:[],savedAt:Date.now()}));
+      if(!_photoWarnShown){
+        _photoWarnShown=true;
+        toast('⚠️ Fotos no guardadas: memoria llena. Exporta el PDF para respaldo.','#fb923c');
+      }
     }catch(e2){}
   }
 }
